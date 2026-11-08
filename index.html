@@ -971,6 +971,21 @@ document.addEventListener('submit', async e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.sheet) closeSheet(); });
 document.addEventListener('visibilitychange', () => { syncScanner(); if (document.visibilityState === 'visible') refresh(true); });
 
+/* ลิงก์ตั้งค่า: #setup=<base64 ของ {"u":url,"k":key,"n":name}> */
+(function(){
+  const m = location.hash.match(/^#setup=(.+)$/);
+  if (!m) return;
+  try {
+    const raw = decodeURIComponent(escape(atob(decodeURIComponent(m[1]).replace(/-/g, '+').replace(/_/g, '/'))));
+    const o = JSON.parse(raw);
+    if (o.u && /^https:\/\/script\.google\.com\/macros\/s\//.test(o.u)){
+      S.cfg = { ...S.cfg, url:o.u, key:o.k || '', name:o.n || S.cfg.name || '', demo:false };
+      LS.set('bmk_cfg', S.cfg); S.data = null; LS.set('bmk_data', null);
+    }
+  } catch (e) {}
+  history.replaceState(null, '', location.pathname + location.search);
+})();
+
 /* start */
 if (S.cfg.url || S.cfg.demo){ S.view = 'home'; render(); refresh(!!S.data); } else render();
 </script>
