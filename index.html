@@ -5,7 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2E4FD8">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>บ้านมีของ</title>
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ติดบ้าน">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-180.png">
+<title>ติดบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500&family=Prompt:wght@400;500&display=swap">
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -264,6 +269,8 @@ const Demo = (() => {
       ['8850000000073','อาหารแมวเปียก','Whiskas','อาหารแมวเปียก','ของแมว','🐾','ซอง',12,14,240],
       ['8850000000080','ถ่าน AA แพ็ค 4','Panasonic','ถ่าน AA','ของใช้','🔋','แพ็ค',1,1,99]
     ].map((r, i) => ({ item_id:'ITM-' + String(i + 1).padStart(4, '0'), barcode:r[0], name:r[1], brand:r[2], group:r[3], category:r[4], icon:r[5], unit:r[6], pack_size:r[7], qty_on_hand:r[8], last_price:r[9], created_at:nowIso(), updated_at:nowIso() }));
+    const SZ = { 'ITM-0001':[830,'ml'], 'ITM-0002':[830,'ml'], 'ITM-0004':[6,'l'], 'ITM-0005':[500,'ml'], 'ITM-0007':[85,'g'] };
+    items.forEach(it => { const z = SZ[it.item_id]; it.size = z ? z[0] : ''; it.size_unit = z ? z[1] : ''; });
     const groups = [...new Set(items.map(i => i.group))].map(g => ({ group_name:g, alert_on: g !== 'ถ่าน AA', created_at:nowIso() }));
     const tx = []; let n = 0;
     const today = new Date();
@@ -298,16 +305,17 @@ const Demo = (() => {
       if (d.barcode && db.items.some(x => String(x.barcode) === String(d.barcode))) throw new Error('บาร์โค้ดนี้มีอยู่แล้ว');
       if (!String(d.name || '').trim()) throw new Error('กรุณาใส่ชื่อสินค้า');
       const max = db.items.reduce((m, x) => Math.max(m, parseInt(x.item_id.replace(/\D/g, ''), 10) || 0), 0);
-      const it = { item_id:'ITM-' + String(max + 1).padStart(4, '0'), barcode:String(d.barcode || ''), name:d.name.trim(), brand:d.brand || '', group:(d.group || '').trim() || d.name.trim(), category:d.category || 'อื่น ๆ', icon:d.icon || '', unit:d.unit || 'ชิ้น', pack_size:Math.max(1, num(d.pack_size, 1)), qty_on_hand:Math.max(0, num(d.qty_on_hand, 0)), last_price:num(d.last_price, ''), created_at:nowIso(), updated_at:nowIso() };
+      const it = { item_id:'ITM-' + String(max + 1).padStart(4, '0'), barcode:String(d.barcode || ''), name:d.name.trim(), brand:d.brand || '', group:(d.group || '').trim() || d.name.trim(), category:d.category || 'อื่น ๆ', icon:d.icon || '', unit:d.unit || 'ชิ้น', pack_size:Math.max(1, num(d.pack_size, 1)), qty_on_hand:Math.max(0, num(d.qty_on_hand, 0)), last_price:num(d.last_price, ''), size:num(d.size, ''), size_unit:d.size_unit || '', created_at:nowIso(), updated_at:nowIso() };
       db.items.push(it); ensureGroup(db, it.group);
       if (it.qty_on_hand > 0) db.transactions.push({ tx_id:txid(), timestamp:nowIso(), item_id:it.item_id, type:'ADJUST', qty_change:it.qty_on_hand, note:'ยอดตั้งต้น' });
       return it;
     },
     updateItem(db, d){
       const it = find(db, d.item_id);
-      ['barcode','name','brand','group','category','icon','unit'].forEach(k => { if (d[k] !== undefined) it[k] = String(d[k]).trim(); });
+      ['barcode','name','brand','group','category','icon','unit','size_unit'].forEach(k => { if (d[k] !== undefined) it[k] = String(d[k]).trim(); });
       if (d.pack_size !== undefined) it.pack_size = Math.max(1, num(d.pack_size, it.pack_size));
       if (d.last_price !== undefined) it.last_price = num(d.last_price, it.last_price);
+      if (d.size !== undefined) it.size = num(d.size, '');
       if (!it.group) it.group = it.name;
       if (it.barcode && db.items.some(x => x.item_id !== it.item_id && String(x.barcode) === String(it.barcode))) throw new Error('บาร์โค้ดนี้ถูกใช้กับสินค้าอื่นแล้ว');
       ensureGroup(db, it.group); return it;
@@ -397,8 +405,25 @@ const D = {
     return D.groups().filter(g => (g.status === 'BUY' || g.status === 'WARN') && !inCart.has(g.name) && !S.skip.includes(g.name))
       .sort((a, b) => (a.status === 'BUY' ? 0 : 1) - (b.status === 'BUY' ? 0 : 1) || a.name.localeCompare(b.name, 'th'));
   },
-  needCount(){ return D.groups().filter(g => g.status === 'BUY').length; }
+  needCount(){ return D.groups().filter(g => g.status === 'BUY').length; },
+  /* ราคาต่อหน่วย: ใช้ขนาด (ml/g) ถ้ามี ไม่งั้นใช้ราคาต่อหน่วยที่นับ */
+  unitPrice(it, price){
+    const pr = price === undefined ? num(it.last_price, null) : num(price, null);
+    if (pr === null || pr <= 0) return null;
+    const ps = Math.max(1, num(it.pack_size, 1)), size = num(it.size, 0), su = String(it.size_unit || '');
+    if (size > 0 && su){ const b = SIZE_BASE[su] || [su, 1]; return { v: pr / (ps * size * b[1]), u: b[0] }; }
+    if (ps > 1) return { v: pr / ps, u: it.unit || 'ชิ้น' };
+    return null;
+  },
+  sizeText(it){ const size = num(it.size, 0); return size > 0 && it.size_unit ? fmt(size) + ' ' + it.size_unit : ''; }
 };
+const SIZE_BASE = { ml:['ml', 1], l:['ml', 1000], g:['g', 1], kg:['g', 1000] };
+const SIZE_UNITS = ['ml', 'l', 'g', 'kg'];
+function fmtUnit(up){
+  if (!up) return '';
+  const d = up.v < 1 ? 3 : 2;
+  return '฿' + up.v.toLocaleString('th-TH', { minimumFractionDigits:2, maximumFractionDigits:d }) + '/' + up.u;
+}
 
 /* =========================================================
    โหลด / sync
@@ -552,6 +577,7 @@ function viewCart(){
         <div class="grow" style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
           <span class="ell">${esc(it.brand ? it.brand + ' ' : '')}${esc(it.name)}</span>
           <span class="small muted row" style="gap:6px">฿<input class="price-in" type="number" inputmode="decimal" min="0" step="0.25" value="${p}" data-act="price" data-i="${i}" aria-label="ราคาต่อแพ็ค">${diff}</span>
+          ${(() => { const up = fmtUnit(D.unitPrice(it, p)); return up ? `<span class="small" style="color:var(--blue-d)">${up}${D.sizeText(it) ? ' · ' + esc(D.sizeText(it)) : ''}</span>` : ''; })()}
         </div>
         <div class="stepper"><button data-act="pk" data-i="${i}" data-d="-1" aria-label="ลดจำนวน">−</button><span>${c.packs}</span><button data-act="pk" data-i="${i}" data-d="1" aria-label="เพิ่มจำนวน">+</button></div>
       </div>`; }).join('')}</div>` : `<div class="empty">ตะกร้ายังว่าง<br>กดสแกนเพื่อเริ่มหยิบของ</div>`}
@@ -642,10 +668,10 @@ function viewDash(){
           <h2 class="h2">ราคาขึ้น</h2>
           ${ups.length ? ups.map(u => `<div class="row"><div class="tile t44" style="background:var(--buy-bg)">${ic('up', 20, '#A3221F')}</div><div class="grow" style="flex:1;min-width:0;display:flex;flex-direction:column"><span class="ell">${esc(u.it.group || u.it.name)} ${esc(u.it.brand)}</span><span class="small muted">฿${fmt(u.a)} → ฿${fmt(u.z)} (+${Math.round(u.pct)}%)</span></div></div>`).join('') : '<span class="small muted">ยังไม่มีสินค้าที่ราคาขึ้น</span>'}
         </div>
-        ${compare.map(g => { const rows = g.items.filter(i => num(i.last_price, 0) > 0).map(i => ({ i, per: num(i.last_price) / Math.max(1, num(i.pack_size, 1)) })).sort((a, b) => a.per - b.per); const mx = Math.max(...rows.map(r => r.per)); return `
+        ${compare.map(g => { const all = g.items.map(i => ({ i, up: D.unitPrice(i) || (num(i.last_price, 0) > 0 ? { v: num(i.last_price), u: 'แพ็ค' } : null) })).filter(x => x.up); const cnt = {}; all.forEach(x => cnt[x.up.u] = (cnt[x.up.u] || 0) + 1); const unit = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0]; const rows = all.filter(x => x.up.u === unit).map(x => ({ i: x.i, per: x.up.v })).sort((a, b) => a.per - b.per); if (rows.length < 2) return ''; const mx = Math.max(...rows.map(r => r.per)); return `
         <div class="card" style="display:flex;flex-direction:column;gap:10px">
-          <h2 class="h2">เทียบยี่ห้อ: ${esc(g.name)}</h2><span class="small muted">ราคาต่อ ${esc(g.unit)}</span>
-          ${rows.map((r, k) => `<div class="hbar"><div class="between"><span>${esc(r.i.brand || r.i.name)}</span><span style="${k === 0 ? 'color:var(--ok-fg)' : ''}">฿${fmt(Math.round(r.per * 100) / 100)}${k === 0 ? ' ถูกสุด' : ''}</span></div><div class="trk"><i style="width:${r.per / mx * 100}%;${k ? 'background:#9DAEF0' : ''}"></i></div></div>`).join('')}
+          <h2 class="h2">เทียบยี่ห้อ: ${esc(g.name)}</h2><span class="small muted">ราคาต่อ ${esc(unit)}</span>
+          ${rows.map((r, k) => `<div class="hbar"><div class="between"><span>${esc(r.i.brand || r.i.name)}</span><span style="${k === 0 ? 'color:var(--ok-fg)' : ''}">${fmtUnit({ v: r.per, u: unit })}${k === 0 ? ' ถูกสุด' : ''}</span></div><div class="trk"><i style="width:${r.per / mx * 100}%;${k ? 'background:#9DAEF0' : ''}"></i></div></div>`).join('')}
         </div>`; }).join('')}
         <div class="card" style="display:flex;flex-direction:column;gap:8px">
           <h2 class="h2">ตัดจำนวนบ่อยสุด</h2><span class="small muted">30 วันล่าสุด</span>
@@ -660,7 +686,7 @@ function viewSettings(){
   const c = S.cfg; const first = !c.url && !c.demo;
   return `
   <div class="hero"><div class="hero-in">
-    <div class="row">${first ? '' : `<button class="avatar" data-act="go" data-v="home" aria-label="กลับ">${ic('back', 20, '#fff')}</button>`}<h1 class="title-xl">${first ? 'ยินดีต้อนรับสู่ บ้านมีของ' : 'ตั้งค่า'}</h1></div>
+    <div class="row">${first ? '' : `<button class="avatar" data-act="go" data-v="home" aria-label="กลับ">${ic('back', 20, '#fff')}</button>`}<h1 class="title-xl">${first ? 'ยินดีต้อนรับสู่ ติดบ้าน' : 'ตั้งค่า'}</h1></div>
   </div></div>${WAVE}
   <div class="body">
     <form class="card form" data-form="cfg">
@@ -704,18 +730,18 @@ function sheetItem(id, qty){
     <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
       <h2 style="font-size:19px;line-height:1.3">${esc(it.brand ? it.brand + ' ' : '')}${esc(it.name)}</h2>
       <span class="small muted">กลุ่ม ${esc(g.name)} · ${esc(it.category)}</span>
-      <span class="small muted">${esc(it.barcode || 'ไม่มีบาร์โค้ด')} · แพ็คละ ${fmt(it.pack_size)} ${esc(it.unit)}</span>
+      <span class="small muted">${esc(it.barcode || 'ไม่มีบาร์โค้ด')} · แพ็คละ ${fmt(it.pack_size)} ${esc(it.unit)}${D.sizeText(it) ? ' × ' + esc(D.sizeText(it)) : ''}</span>
     </div>
   </div>
   <div class="stats">
     <div class="stat"><span class="small muted">ทั้งกลุ่มเหลือ</span><b>${fmt(g.qty)}</b><span class="small muted">${esc(g.unit)}</span>${statusPill(g.status)}</div>
-    <div class="stat"><span class="small muted">ราคาล่าสุด</span><b>${last !== null ? '฿' + fmt(last) : '—'}</b>${diff}</div>
+    <div class="stat"><span class="small muted">ราคาล่าสุด</span><b>${last !== null ? '฿' + fmt(last) : '—'}</b>${diff}${fmtUnit(D.unitPrice(it)) ? `<span class="small" style="color:var(--blue-d)">${fmtUnit(D.unitPrice(it))}</span>` : ''}</div>
     <div class="stat"><span class="small muted">ใช้เฉลี่ย</span><b>${fmt(D.usePerWeek(g.name))}</b><span class="small muted">${esc(g.unit)}/สัปดาห์</span></div>
   </div>
   ${buys.length ? `<div class="card" style="display:flex;flex-direction:column;gap:8px"><span class="small muted">ประวัติราคา ${buys.length} ครั้งล่าสุด</span>
     <div class="bars">${buys.map((b, i) => { const d = new Date(b.timestamp); return `<div class="bar ${i === buys.length - 1 ? 'cur' : ''}"><span>${fmt(b.price_per_pack)}</span><i style="height:${barH(num(b.price_per_pack))}px"></i><span>${d.getDate()} ${MONTHS[d.getMonth()]}</span></div>`; }).join('')}</div></div>` : ''}
   ${g.items.length > 1 ? `<div class="card" style="display:flex;flex-direction:column;gap:8px"><span class="small muted">ยี่ห้ออื่นในกลุ่ม</span>
-    ${g.items.filter(x => x.item_id !== it.item_id).map(x => `<button class="lrow" style="background:var(--bg);padding:8px 12px" data-act="open" data-id="${x.item_id}"><span class="grow ell">${esc(x.brand || x.name)}</span><span class="small muted">${x.last_price !== '' ? '฿' + fmt(x.last_price) : ''}</span><span class="qty">${fmt(x.qty_on_hand)} ${esc(x.unit)}</span></button>`).join('')}</div>` : ''}
+    ${g.items.filter(x => x.item_id !== it.item_id).map(x => `<button class="lrow" style="background:var(--bg);padding:8px 12px" data-act="open" data-id="${x.item_id}"><span class="grow ell">${esc(x.brand || x.name)}</span><span class="small muted">${fmtUnit(D.unitPrice(x)) || (x.last_price !== '' ? '฿' + fmt(x.last_price) : '')}</span><span class="qty">${fmt(x.qty_on_hand)} ${esc(x.unit)}</span></button>`).join('')}</div>` : ''}
   <label class="toggle"><span style="flex:1;display:flex;flex-direction:column"><span>เตือนเมื่อใกล้หมด</span><span class="small muted">${g.alert ? 'ขึ้นใน Shopping list เมื่อทั้งกลุ่มเหลือ ≤ ' + D.levels().buy : 'กลุ่มนี้จะไม่ขึ้นใน Shopping list'}</span></span>
     <span class="switch"><input type="checkbox" data-act="alert" data-g="${esc(g.name)}" ${g.alert ? 'checked' : ''} aria-label="เตือนเมื่อใกล้หมด"><span></span></span></label>
   <div class="row"><button class="btn ghost sm" style="flex:1" data-act="edit" data-id="${it.item_id}">${ic('edit', 18)} แก้ไขสินค้า</button><button class="btn ghost sm" style="flex:1" data-act="count" data-id="${it.item_id}">นับสต็อกใหม่</button></div>
@@ -748,9 +774,14 @@ function sheetForm(f){
       <label class="field">หน่วยที่นับ<input name="unit" value="${v('unit') || 'ชิ้น'}" placeholder="กล่อง, ฟอง, ม้วน"></label>
     </div>
     <div class="grid2">
-      <label class="field">1 แพ็คมีกี่หน่วย<input name="pack_size" type="number" min="1" inputmode="numeric" value="${v('pack_size') || 1}"></label>
+      <label class="field">1 แพ็คมีกี่${esc(v('unit') || 'ชิ้น')}<input name="pack_size" type="number" min="1" inputmode="numeric" value="${v('pack_size') || 1}"></label>
       <label class="field">ราคาต่อแพ็ค (บาท)<input name="last_price" type="number" min="0" step="0.25" inputmode="decimal" value="${v('last_price')}"></label>
     </div>
+    <div class="grid2">
+      <label class="field">ขนาดต่อ 1 หน่วย (เว้นได้)<input name="size" type="number" min="0" step="any" inputmode="decimal" value="${v('size')}" placeholder="เช่น 300"></label>
+      <label class="field">หน่วยขนาด<select name="size_unit"><option value="">—</option>${SIZE_UNITS.map(u => `<option ${String(f.draft.size_unit ?? it.size_unit ?? '') === u ? 'selected' : ''}>${u}</option>`).join('')}</select></label>
+    </div>
+    <span class="small muted" style="margin-top:-6px">ใส่ขนาดเพื่อเทียบราคาต่อ ml / g ระหว่างยี่ห้อ</span>
     ${!f.id && !f.toCart ? `<label class="field">ตอนนี้มีอยู่กี่หน่วย<input name="qty_on_hand" type="number" min="0" inputmode="numeric" value="${v('qty_on_hand') || 0}"></label>` : ''}
     <div class="field">ไอคอน (ไม่เลือก = ใช้ไอคอนของหมวด)<div class="emojis">${EMOJIS.map(e => `<button type="button" class="${curIcon === e ? 'on' : ''}" data-act="emoji" data-e="${e}" aria-label="เลือก ${e}">${e}</button>`).join('')}</div><input type="hidden" name="icon" value="${esc(curIcon)}"></div>
     <div class="err" id="form-err"></div>
@@ -776,7 +807,7 @@ function render(){
   const V = { home:viewHome, scan:viewScan, cart:viewCart, dash:viewDash, settings:viewSettings }[S.view];
   const sameScan = S.view === 'scan' && S._shown === 'scan:' + S.mode && document.getElementById('reader');
   if (sameScan) document.getElementById('scan-side').innerHTML = scanSide();
-  else view.innerHTML = (S.data || S.view === 'settings') ? V() : `<div class="hero"><div class="hero-in"><h1 class="title-xl">บ้านมีของ</h1></div></div>${WAVE}<div class="body"><div class="empty">กำลังโหลดข้อมูล…</div></div>`;
+  else view.innerHTML = (S.data || S.view === 'settings') ? V() : `<div class="hero"><div class="hero-in"><h1 class="title-xl">ติดบ้าน</h1></div></div>${WAVE}<div class="body"><div class="empty">กำลังโหลดข้อมูล…</div></div>`;
   S._shown = S.view === 'scan' ? 'scan:' + S.mode : S.view;
   document.getElementById('nav').innerHTML = first ? '' : navHtml(false);
   document.getElementById('nav').classList.toggle('hidden', first);
@@ -912,8 +943,8 @@ document.addEventListener('click', async e => {
       } catch (err){}
       break;
     }
-    case 'demo-on': S.cfg.demo = true; LS.set('bmk_cfg', S.cfg); await refresh(); go('home'); break;
-    case 'demo-off': S.cfg.demo = false; LS.set('bmk_cfg', S.cfg); S.data = null; LS.set('bmk_data', null); S.cart = []; S.skip = []; saveCart(); await refresh(); render(); break;
+    case 'demo-on': S.cfg.demo = true; LS.set('bmk_cfg', S.cfg); keepSetupInUrl(); await refresh(); go('home'); break;
+    case 'demo-off': S.cfg.demo = false; LS.set('bmk_cfg', S.cfg); keepSetupInUrl(); S.data = null; LS.set('bmk_data', null); S.cart = []; S.skip = []; saveCart(); await refresh(); render(); break;
     case 'demo-reset': Demo.reset(); S.cart = []; S.skip = []; saveCart(); await refresh(); toast('ล้างข้อมูลตัวอย่างแล้ว'); break;
   }
 });
@@ -942,7 +973,7 @@ document.addEventListener('submit', async e => {
   if (kind === 'cfg'){
     S.cfg = { ...S.cfg, url:(fd.url || '').trim(), key:(fd.key || '').trim(), name:(fd.name || '').trim() };
     if (S.cfg.url) S.cfg.demo = false;
-    LS.set('bmk_cfg', S.cfg);
+    LS.set('bmk_cfg', S.cfg); keepSetupInUrl();
     if (!S.cfg.url && !S.cfg.demo){ render(); return; }
     setLoading('กำลังเชื่อมต่อ…');
     try { S.data = await api('getAll'); LS.set('bmk_data', S.data); setLoading(''); toast('เชื่อมต่อสำเร็จ'); go('home'); }
@@ -971,10 +1002,19 @@ document.addEventListener('submit', async e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.sheet) closeSheet(); });
 document.addEventListener('visibilitychange', () => { syncScanner(); if (document.visibilityState === 'visible') refresh(true); });
 
+/* เก็บค่าตั้งไว้ใน URL ตลอด: iPhone ใช้ URL ปัจจุบันตอน Add to Home Screen
+   และไอคอนบนหน้าจอมีที่เก็บข้อมูลแยกจาก Safari */
+function setupHash(){
+  if (!S.cfg.url || S.cfg.demo) return '';
+  const json = JSON.stringify({ u:S.cfg.url, k:S.cfg.key, n:S.cfg.name || '' });
+  return '#setup=' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function keepSetupInUrl(){ try { history.replaceState(null, '', location.pathname + location.search + setupHash()); } catch (e) {} }
+
 /* ลิงก์ตั้งค่า: #setup=<base64 ของ {"u":url,"k":key,"n":name}> */
 (function(){
   const m = location.hash.match(/^#setup=(.+)$/);
-  if (!m) return;
+  if (!m){ keepSetupInUrl(); return; }
   try {
     const raw = decodeURIComponent(escape(atob(decodeURIComponent(m[1]).replace(/-/g, '+').replace(/_/g, '/'))));
     const o = JSON.parse(raw);
@@ -983,7 +1023,7 @@ document.addEventListener('visibilitychange', () => { syncScanner(); if (documen
       LS.set('bmk_cfg', S.cfg); S.data = null; LS.set('bmk_data', null);
     }
   } catch (e) {}
-  history.replaceState(null, '', location.pathname + location.search);
+  keepSetupInUrl();
 })();
 
 /* start */

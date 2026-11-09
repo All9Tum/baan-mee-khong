@@ -1,4 +1,10 @@
-# บ้านมีของ — คู่มือติดตั้ง
+# ติดบ้าน — คู่มือติดตั้ง
+
+> **ติดตั้งแล้ว (9 พ.ย. 2026)**
+> - แอพ: https://all9tum.github.io/tid-baan/
+> - Google Sheet: https://docs.google.com/spreadsheets/d/1bBq8KssdreaGjuzlyv52ukZkyElwUR4jiv9gYdGAaDI/edit
+> - Apps Script: โปรเจกต์ "บ้านมีของ API" (ชื่อเดิม) (สคริปต์แยก ผูกกับชีตผ่าน `SHEET_ID` ในโค้ด)
+> - Web app URL / API KEY: ดูใน Apps Script › Deploy › Manage deployments และฟังก์ชัน `showApiKey`
 
 แอพจัดการของในบ้าน ข้อมูลเก็บใน Google Sheet ของเราเอง ใช้บนมือถือเป็นหลัก ดูแดชบอร์ดบนคอมได้
 
@@ -14,7 +20,7 @@ baan-mee-khong/
 
 ## ขั้นที่ 1 — สร้าง Google Sheet + API (ประมาณ 5 นาที)
 
-1. เปิด https://sheets.new ตั้งชื่อชีต เช่น `บ้านมีของ`
+1. เปิด https://sheets.new ตั้งชื่อชีต เช่น `ติดบ้าน`
 2. เมนู **Extensions › Apps Script**
 3. ลบโค้ดเดิม แล้ววางโค้ดทั้งหมดจาก `apps-script/Code.gs` กด 💾 Save
 4. เลือกฟังก์ชัน `setup` ที่แถบบน แล้วกด **Run**
